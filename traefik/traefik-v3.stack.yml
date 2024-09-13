@@ -1,0 +1,61 @@
+version: '3.3'
+
+services:
+  traefik:
+     image: docker.arvancloud.ir/traefik:v3.1 # The official v3 Traefik docker image
+     environment:
+       - TZ=Asia/Tehran  
+     command:
+       - --providers.swarm
+       - --providers.swarm.endpoint=unix:///var/run/docker.sock
+       - --providers.swarm.exposedbydefault=false
+       - --api
+       - --api.dashboard=true
+       - --api.insecure=true
+       - --log.level=INFO
+       - --entrypoints.web.address=:80
+       - --providers.swarm.network=traefik-public  
+       - --accesslog=true
+       - --accesslog.filepath=/var/log/access.log
+       - --accesslog.bufferingsize=100
+       - --entrypoints.web.forwardedHeaders.insecure
+       - --entrypoints.web.proxyProtocol.insecure  
+     ports:
+       - target: 80
+         published: 80
+         protocol: tcp
+         mode: host
+         
+     deploy:
+      labels:
+        # Dashboard
+        - 'traefik.enable=true'
+        # Change the host url here
+        - 'traefik.http.routers.traefik.rule=Host(`traefik.example.win`)'
+        - 'traefik.http.routers.traefik.service=api@internal'
+        - 'traefik.http.services.traefik.loadbalancer.server.port=8080'
+          #- 'traefik.http.routers.traefik.tls.certresolver=leresolver'
+        - 'traefik.http.routers.traefik.entrypoints=web'
+        - 'traefik.http.routers.traefik.middlewares=authtraefik'
+        # Change the auth password here
+        - 'traefik.http.middlewares.authtraefik.basicauth.users=done-admin:{SHA}CUud1XR2R7okJWB8lx5k8jB0bOY=' # user/password
+
+        # global redirect to https
+        - 'traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)'
+        - 'traefik.http.routers.http-catchall.entrypoints=web'
+        - 'traefik.http.routers.http-catchall.middlewares=redirect-to-https'
+
+        # middleware redirect
+        - 'traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https'
+      placement:
+        constraints:
+          - node.role == manager    
+     networks:
+       - traefik-public
+     volumes:
+       - /var/run/docker.sock:/var/run/docker.sock
+       - /var/log/traefik:/var/log  
+
+networks:
+  traefik-public:
+    external: true

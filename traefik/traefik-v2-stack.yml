@@ -1,0 +1,63 @@
+version: '3.3'
+
+services:
+  traefik:
+    image: 'docker.arvancloud.ir/traefik:v2.1.4'
+    command:
+      - --log.level=INFO  #DEBUG
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.swarmmode=true
+      - --providers.swarm.network=traefik-public
+      - --api
+      - --api.dashboard=true
+      - --certificatesresolvers.leresolver.acme.caserver=https://acme-v02.api.letsencrypt.org/directory
+      # update your email here
+      - --certificatesresolvers.leresolver.acme.email=youremail@test.com
+      # Make sure the this file is available and permission is set correctly
+      - --certificatesresolvers.leresolver.acme.storage=/le/acme.json
+      - --certificatesresolvers.leresolver.acme.tlschallenge=true  
+      - --accesslog=true
+      - --accesslog.filepath=/var/log/access.log
+      - --accesslog.bufferingsize=100
+      - --entrypoints.web.forwardedHeaders.insecure
+      - --entrypoints.web.proxyProtocol.insecure
+
+    ports:
+      - '80:80'
+      - '443:443'
+    networks:
+      - traefik-public
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      # Make sure the volume folder is created
+      - './traefik/acme.json:/le/acme.json'
+      - '/var/log/traefik:/var/log'
+    deploy:
+      labels:
+        # Dashboard
+        - 'traefik.enable=true'
+        # Change the host url here
+        - 'traefik.http.routers.traefik.rule=Host(`traefik.example.win`)'
+        - 'traefik.http.routers.traefik.service=api@internal'
+        - 'traefik.http.services.traefik.loadbalancer.server.port=8080'
+        - 'traefik.http.routers.traefik.tls.certresolver=leresolver'
+        - 'traefik.http.routers.traefik.entrypoints=websecure'
+        - 'traefik.http.routers.traefik.middlewares=authtraefik'
+        # Change the auth password here
+        - 'traefik.http.middlewares.authtraefik.basicauth.users=admin:yournewpassword' # user/password
+
+        # global redirect to https
+        - 'traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)'
+        - 'traefik.http.routers.http-catchall.entrypoints=web'
+        - 'traefik.http.routers.http-catchall.middlewares=redirect-to-https'
+
+        # middleware redirect
+        - 'traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https'
+
+networks:
+  traefik-public:
+    external: true
